@@ -37,6 +37,8 @@ __global__ void myTransform(const char *text, int *pos, int n){
 	if (index < n){
 		if (text[index] != ' ' && text[index] != '\n')
 			pos[index] = 1;
+		else
+			pos[index] = 0;
 	}
 }
 
@@ -52,18 +54,13 @@ __global__ void myBuildTree(int *BIT, int n){
 			int offset = (1 << (i-1));
 			int tmp = index - offset;
 			if (tmp >= 0){
-				if (row_pre[tmp] != 0 && row_pre[index] != 0){
+				if (row_pre[tmp] != 0 && row_pre[index] != 0)
 					row_cur[index] = row_pre[index] + row_pre[tmp];
-				}
-				else{
-					//row_cur[index] = 0;
-					return;
-				}
+				else
+					row_cur[index] = 0;
 			}
-			else{
-				//row_cur[index] = row_pre[index];
-				return;
-			}
+			else
+				row_cur[index] = row_pre[index];
 			__syncthreads();
 
 			row_pre = row_cur;
@@ -103,9 +100,10 @@ void CountPosition2(const char *text, int *pos, int text_size)
 	dim3 grid(CeilDiv(text_size, ThreadSize), 1), block(ThreadSize, 1);
 	dim3 grid2(CeilDiv(text_size, ThreadSize), 2);
 	cudaMallocPitch(&BIT, &pitch, sizeof(int)*text_size, 10);
-	cudaMemset2D(BIT, pitch, 0, sizeof(int)*text_size, 10);
 
 	myTransform<<< grid, block>>>(text, BIT, text_size);
 	myBuildTree<<< grid2, block>>>(BIT, text_size);
 	mySet<<< grid, block>>>(pos, BIT, text_size);
+
+	cudaFree(BIT);
 }
