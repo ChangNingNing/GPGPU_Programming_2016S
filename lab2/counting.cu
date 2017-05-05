@@ -15,9 +15,7 @@ struct is_char
 	__host__ __device__
 	int operator()(char x)
 	{
-		if (x > ' ')
-			return 1;
-		return 0;
+			return x > ' ';
 	}
 };
 
