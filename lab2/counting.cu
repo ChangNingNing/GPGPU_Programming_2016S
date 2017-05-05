@@ -15,7 +15,7 @@ struct is_char
 	__host__ __device__
 	int operator()(char x)
 	{
-		if (x != ' ' && x != '\n')
+		if (x > ' ')
 			return 1;
 		return 0;
 	}
@@ -41,37 +41,33 @@ __global__ void myCudaCount(const char *text, int *pos, int n){
 
 	if (index < n){
 		// Transform
-		if (text[index] != ' ' && text[index] != '\n')
-			BIT[mapIndex][0] = 1;
-		else
-			BIT[mapIndex][0] = 0;
+		BIT[mapIndex][0] = text[index] > ' ';
 		__syncthreads();
 
 		// Build tree
 		int base = 1;
-		int offset = 1;
-		for (int i=1; i<10; i++, offset <<= 1){
+		int before = BIT[mapIndex][0];
+		for (int i=1, offset=1; i<10; i++, offset <<= 1){
 			int tmp = index - offset;
 			if (tmp >= left){
-				if (BIT[tmp - left][i-1] != 0 && BIT[mapIndex][i-1] != 0){
-					BIT[mapIndex][i] = BIT[mapIndex][i-1] + BIT[tmp - left][i-1];
+				if (before != 0 && BIT[tmp - left][i-1] != 0){
+					before = (BIT[mapIndex][i] = before + BIT[tmp - left][i-1]);
 					base = i + 1;
 				}
 				else
-					BIT[mapIndex][i] = 0;
+					before = (BIT[mapIndex][i] = 0);
 			}
 			else{
-				BIT[mapIndex][i] = BIT[mapIndex][i-1];
+				BIT[mapIndex][i] = before;
 				base = i + 1;
 			}
 			__syncthreads();
 		}
 
 		// Set
-		offset = index;
-		for (int i=base-1; i>=0 && offset>=left; i--){
+		int offset = index;
+		for (int i=base-1; i>=0 && offset>=left; i--)
 			offset -= BIT[offset - left][i];
-		}
 
 		if (index >= left + ThreadSize/2 || index < ThreadSize / 2)
 			pos[index] = index - offset;
