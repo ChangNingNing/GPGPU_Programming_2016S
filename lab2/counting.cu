@@ -29,7 +29,7 @@ void CountPosition1(const char *text, int *pos, int text_size)
 }
 
 #define ThreadSize 1024
-
+/*
 __global__ void myTransform(const char *text, int *pos, int n){
 	int x = blockIdx.x, y = threadIdx.x;
 	int index = x * blockDim.x + y;
@@ -41,6 +41,7 @@ __global__ void myTransform(const char *text, int *pos, int n){
 			pos[index] = 0;
 	}
 }
+*/
 
 __global__ void myBuildTree(const char *text, int *pos, int *BIT, int n){
 	int x = blockIdx.x;
@@ -48,7 +49,17 @@ __global__ void myBuildTree(const char *text, int *pos, int *BIT, int n){
 	int index = x * blockDim.x + y;
 	int left = (blockIdx.y == 1)? x*blockDim.x + ThreadSize/2: x*blockDim.x;
 
+//	__shared__ int _BIT[ThreadSize][10];
+
 	if (index < n){
+		/* Transform */
+		if (text[index] != ' ' && text[index] != '\n')
+			BIT[index] = 1;
+		else
+			BIT[index] = 0;
+		__syncthreads();
+
+		/* Build tree */
 		int *row_pre = (int *)(BIT);
 		int *row_cur = (int *)(BIT + n);
 		int base = 1;
@@ -74,6 +85,7 @@ __global__ void myBuildTree(const char *text, int *pos, int *BIT, int n){
 		}
 		__syncthreads();
 
+		/* Set */
 		int offset = index;
 		row_cur = (int *)(BIT + (base-1)*n);
 		for (int i=base-1; i>=0 && offset>=left; i--){
@@ -86,6 +98,7 @@ __global__ void myBuildTree(const char *text, int *pos, int *BIT, int n){
 	}
 }
 
+/*
 __global__ void mySet(int *pos, int *BIT, int n){
 	int x = blockIdx.x, y = threadIdx.x;
 	int index = x * blockDim.x + y;
@@ -109,16 +122,17 @@ __global__ void mySet(int *pos, int *BIT, int n){
 		pos[index] = index - offset;
 	}
 }
+*/
 
 void CountPosition2(const char *text, int *pos, int text_size)
 {
 	int *BIT;
 	size_t pitch;
-	dim3 grid(CeilDiv(text_size, ThreadSize), 1), block(ThreadSize, 1);
-	dim3 grid2(CeilDiv(text_size, ThreadSize), 2);
+//	dim3 grid(CeilDiv(text_size, ThreadSize), 1), block(ThreadSize, 1);
+	dim3 grid2(CeilDiv(text_size, ThreadSize), 2), block(ThreadSize, 1);
 	cudaMallocPitch(&BIT, &pitch, sizeof(int)*text_size, 10);
 
-	myTransform<<< grid, block>>>(text, BIT, text_size);
+//	myTransform<<< grid, block>>>(text, BIT, text_size);
 	myBuildTree<<< grid2, block>>>(text, pos, BIT, text_size);
 //	mySet<<< grid, block>>>(pos, BIT, text_size);
 
