@@ -42,30 +42,47 @@ __global__ void myTransform(const char *text, int *pos, int n){
 	}
 }
 
-__global__ void myBuildTree(int *BIT, int n){
+__global__ void myBuildTree(const char *text, int *pos, int *BIT, int n){
 	int x = blockIdx.x;
 	int y = (blockIdx.y == 1)? threadIdx.x + ThreadSize/2: threadIdx.x;
 	int index = x * blockDim.x + y;
+	int left = (blockIdx.y == 1)? x*blockDim.x + ThreadSize/2: x*blockDim.x;
 
 	if (index < n){
 		int *row_pre = (int *)(BIT);
 		int *row_cur = (int *)(BIT + n);
+		int base = 1;
 		for (int i=1; i<10; i++){
 			int offset = (1 << (i-1));
 			int tmp = index - offset;
-			if (tmp >= 0){
-				if (row_pre[tmp] != 0 && row_pre[index] != 0)
+			if (tmp >= left){
+				if (row_pre[tmp] != 0 && row_pre[index] != 0){
 					row_cur[index] = row_pre[index] + row_pre[tmp];
+					base = i + 1;
+				}
 				else
 					row_cur[index] = 0;
 			}
-			else
+			else{
 				row_cur[index] = row_pre[index];
+				base = i + 1;
+			}
 			__syncthreads();
 
 			row_pre = row_cur;
 			row_cur += n;
 		}
+		__syncthreads();
+
+		int offset = index;
+		row_cur = (int *)(BIT + (base-1)*n);
+		for (int i=base-1; i>=0 && offset>=left; i--){
+			offset -= row_cur[offset];
+			row_cur -= n;
+		}
+
+		if (index >= left + ThreadSize/2 || index < ThreadSize / 2)
+			pos[index] = index - offset;
 	}
 }
 
@@ -102,8 +119,8 @@ void CountPosition2(const char *text, int *pos, int text_size)
 	cudaMallocPitch(&BIT, &pitch, sizeof(int)*text_size, 10);
 
 	myTransform<<< grid, block>>>(text, BIT, text_size);
-	myBuildTree<<< grid2, block>>>(BIT, text_size);
-	mySet<<< grid, block>>>(pos, BIT, text_size);
+	myBuildTree<<< grid2, block>>>(text, pos, BIT, text_size);
+//	mySet<<< grid, block>>>(pos, BIT, text_size);
 
 	cudaFree(BIT);
 }
