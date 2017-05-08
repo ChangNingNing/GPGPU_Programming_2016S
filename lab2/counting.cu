@@ -26,54 +26,75 @@ void CountPosition1(const char *text, int *pos, int text_size)
 	thrust::inclusive_scan_by_key(thrust::device, pos, pos+text_size, pos, pos);
 }
 
-#define ThreadSize 1024
+#define ThreadSize 256
+#define LOGT 8
+#define SeqSize 4
 
 __global__ void myCudaCount(const char *text, int *pos, int n){
-	int x = blockIdx.x;
-	int left = (blockIdx.y == 1)? x * blockDim.x + ThreadSize/2: x * blockDim.x;
-	int y = threadIdx.x;
-	int index = left + y;
-	int mapIndex = index - left;
+	int bid = blockIdx.x;
+	int left = (blockIdx.y == 1)? bid * blockDim.x + ThreadSize/2: bid * blockDim.x;
+	int tid = threadIdx.x;
+	int id = left + tid;
 
-	__shared__ int BIT[ThreadSize][10];
+	__shared__ int BIT[ThreadSize][LOGT];
+	__shared__ int iBIT[ThreadSize];
+	int seqIndex = id * SeqSize;
+	int seq[SeqSize];
 
-	if (index < n){
+	if (seqIndex < n){
 		// Transform
-		BIT[mapIndex][0] = text[index] > ' ';
+		int count = 1;
+		for (int i=0; i<SeqSize; i++, count++){
+			if (seqIndex + i < n){
+				if (text[seqIndex + i] <= ' ')
+					count = 0;
+			}
+			else{
+				count = 0;
+			}
+			seq[i] = count;
+		}
+
+		iBIT[tid] = SeqSize - 1 - seq[SeqSize - 1];
+		BIT[tid][0] = seq[SeqSize - 1] / SeqSize;
 		__syncthreads();
 
 		// Build tree
-		int base = 1;
-		int before = BIT[mapIndex][0];
-		for (int i=1, offset=1; i<10; i++, offset <<= 1){
-			int tmp = index - offset;
-			if (tmp >= left){
-				if (before != 0 && BIT[tmp - left][i-1] != 0){
-					before = (BIT[mapIndex][i] = before + BIT[tmp - left][i-1]);
-					base = i + 1;
+		int before = BIT[tid][0];
+		for (int i=1, offset=1; i<LOGT; i++, offset <<= 1){
+			int tmp = tid - offset;
+			if (tmp >= 0){
+				if (before != 0 && BIT[tmp][i-1] != 0){
+					before = (BIT[tid][i] = before + BIT[tmp][i-1]);
 				}
 				else
-					before = (BIT[mapIndex][i] = 0);
+					before = (BIT[tid][i] = 0);
 			}
 			else{
-				BIT[mapIndex][i] = before;
-				base = i + 1;
+				BIT[tid][i] = before;
 			}
 			__syncthreads();
 		}
 
 		// Set
-		int offset = index;
-		for (int i=base-1; i>=0 && offset>=left; i--)
-			offset -= BIT[offset - left][i];
+		int offset = tid - 1;
+		for (int i=LOGT-1; i>=0 && offset>=0; i--)
+			offset -= BIT[offset][i];
 
-		if (index >= left + ThreadSize/2 || index < ThreadSize / 2)
-			pos[index] = index - offset;
+		if (offset >= 0) offset = (left + offset) * SeqSize + iBIT[offset];
+
+		if (tid >= ThreadSize/2 || id < ThreadSize / 2){
+			for (int i=0; i<SeqSize && seqIndex+i<n; i++){
+				if (seq[i] == 0)
+					offset = seqIndex + i;
+				pos[seqIndex + i] = seqIndex + i - offset;
+			}
+		}
 	}
 }
 
 void CountPosition2(const char *text, int *pos, int text_size)
 {
-	dim3 grid(CeilDiv(text_size, ThreadSize), 2), block(ThreadSize, 1);
+	dim3 grid(CeilDiv( CeilDiv(text_size, SeqSize), ThreadSize), 2), block(ThreadSize, 1);
 	myCudaCount<<< grid, block>>>(text, pos, text_size);
 }
