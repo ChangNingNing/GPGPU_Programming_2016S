@@ -158,7 +158,7 @@ void PoissonImageCloning(
 	cudaMemcpy(buf1, target, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
 
 	// iterate
-	for (int i = 0; i < 4000; i++){
+	for (int i = 0; i < 5000; i++){
 		PossionImageCloningIteration<<<gdim, bdim>>>(
 			fixed, mask, buf1, buf2, wt, ht, i
 		);
