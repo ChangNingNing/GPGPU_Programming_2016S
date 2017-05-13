@@ -27,6 +27,92 @@ __global__ void SimpleClone(
 	}
 }
 
+__global__ void CalculateFixed(
+	const float *background,
+	const float *target,
+	const float *mask,
+	float *fixed,
+	const int wb, const int hb, const int wt, const int ht,
+	const int oy, const int ox
+){
+	const int dir[4][2] = {	{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
+	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
+	const int curt = wt * yt + xt;
+	if (yt < ht && xt < wt){
+		if (mask[curt] > 127.0f){
+			float sum[3] = {0}, bsum[3] = {0};
+			int num = 0, bnum = 4;
+			for (int i=0; i<4; i++){
+				int dxt = xt + dir[i][0];
+				int dyt = yt + dir[i][1];
+				int dcurt = wt * dyt + dxt;
+				int dxb = ox + dxt;
+				int dyb = oy + dyt;
+				int dcurb = wb * dyb + dxb;
+				if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
+					sum[0] += target[dcurt*3 + 0];
+					sum[1] += target[dcurt*3 + 1];
+					sum[2] += target[dcurt*3 + 2];
+					num++;
+
+					if (mask[dcurt] < 127.0f &&
+						dxb >= 0 && dxb < wb && dyb >= 0 && dyb < hb){
+						bsum[0] += background[dcurb*3 + 0];
+						bsum[1] += background[dcurb*3 + 1];
+						bsum[2] += background[dcurb*3 + 2];	
+					}
+				}
+				else if (dxb >= 0 && dxb < wb && dyb >= 0 && dyb < hb){
+					bsum[0] += background[dcurb*3 + 0];
+					bsum[1] += background[dcurb*3 + 1];
+					bsum[2] += background[dcurb*3 + 2];
+				}
+			}
+			fixed[curt*3+0] = target[curt*3+0] - sum[0] / num + bsum[0] / bnum;
+			fixed[curt*3+1] = target[curt*3+1] - sum[1] / num + bsum[1] / bnum;
+			fixed[curt*3+2] = target[curt*3+2] - sum[2] / num + bsum[2] / bnum;
+		}
+		else {
+			fixed[curt*3+0] = 0;
+			fixed[curt*3+1] = 0;
+			fixed[curt*3+2] = 0;
+		}
+	}
+}
+
+__global__ void PossionImageCloningIteration(
+	const float *fixed,
+	const float *mask,
+	float *input,
+	float *output,
+	const int wt, const int ht
+){
+	const int dir[4][2] = {	{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
+	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
+	const int curt = wt * yt + xt;
+	if (yt < ht && xt < wt && mask[curt] > 127.0f){
+		float sum[3] = {0};
+		int num = 4;
+		for (int i=0; i<4; i++){
+			int dxt = xt + dir[i][0];
+			int dyt = yt + dir[i][1];
+			if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
+				int dcurt = wt * dyt + dxt;
+				if (mask[dcurt] > 127.0f){
+					sum[0] += input[dcurt*3+0];
+					sum[1] += input[dcurt*3+1];
+					sum[2] += input[dcurt*3+2];
+				}
+			}
+		}
+		output[curt*3+0] = fixed[curt*3+0] + sum[0] / num;
+		output[curt*3+1] = fixed[curt*3+1] + sum[1] / num;
+		output[curt*3+2] = fixed[curt*3+2] + sum[2] / num;
+	}
+}
+
 void PoissonImageCloning(
 	const float *background,
 	const float *target,
@@ -36,9 +122,34 @@ void PoissonImageCloning(
 	const int oy, const int ox
 )
 {
+	// set up
+	float *fixed, *buf1, *buf2;
+	cudaMalloc(&fixed, 3*wt*ht*sizeof(float));
+	cudaMalloc(&buf1, 3*wt*ht*sizeof(float));
+	cudaMalloc(&buf2, 3*wt*ht*sizeof(float));
+
+	// initialize the iteration
+	dim3 gdim(CeilDiv(wt, 32), CeilDiv(ht, 16)), bdim(32, 16);
+	CalculateFixed<<< gdim, bdim>>>(
+		background, target, mask, fixed,
+		wb, hb, wt, ht, oy, ox
+	);
+	cudaMemcpy(buf1, target, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
+
+	// iterate
+	for (int i = 0; i < 10000; i++){
+		PossionImageCloningIteration<<<gdim, bdim>>>(
+			fixed, mask, buf1, buf2, wt, ht
+		);
+		PossionImageCloningIteration<<<gdim, bdim>>>(
+			fixed, mask, buf2, buf1, wt, ht
+		);
+	}
+
+	// copy the image back
 	cudaMemcpy(output, background, wb*hb*sizeof(float)*3, cudaMemcpyDeviceToDevice);
-	SimpleClone<<<dim3(CeilDiv(wt,32), CeilDiv(ht,16)), dim3(32,16)>>>(
-		background, target, mask, output,
+	SimpleClone<<<gdim, bdim>>>(
+		background, buf1, mask, output,
 		wb, hb, wt, ht, oy, ox
 	);
 }
