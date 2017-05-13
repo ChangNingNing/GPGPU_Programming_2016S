@@ -18,3 +18,8 @@
     * converges at 10000 iterations.
 * *lab3.cu* use the advanced laplacian 5x5 coef. matrix
     * converges at 8000 iterations.
+    | 1 | 0 |  1 | 0 | 1 |
+    | 0 | 2 |  2 | 2 | 0 |
+    | 1 | 2 | 24 | 2 | 1 |
+    | 0 | 2 |  2 | 2 | 0 |
+    | 1 | 0 |  1 | 0 | 1 |
