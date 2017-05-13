@@ -35,25 +35,15 @@ __global__ void CalculateFixed(
 	const int wb, const int hb, const int wt, const int ht,
 	const int oy, const int ox
 ){
-	const int dir[16][2] = {{-2, -2},				{0, -2},			{2, -2},
-										{-1, -1},	{0, -1},	{1, -1},
-							{-2, 0},	{-1, 0},				{1, 0},	{2, 0},
-										{-1, 1},	{0, 1},		{1, 1},
-							{-2, 2},				{0, 2},				{2, 2}};
-	const int coef[16] = {	1,		1,		1,
-								2,	2,	2,
-							1,	2,		2,	1,
-								2,	2,	2,
-							1,		1,		1};
-
+	const int dir[4][2] = {	{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
 	const int curt = wt * yt + xt;
 	if (yt < ht && xt < wt){
 		if (mask[curt] > 127.0f){
 			float sum[3] = {0}, bsum[3] = {0};
-			int num = 0, bnum = 24;
-			for (int i=0; i<16; i++){
+			int num = 0, bnum = 4;
+			for (int i=0; i<4; i++){
 				int dxt = xt + dir[i][0];
 				int dyt = yt + dir[i][1];
 				int dcurt = wt * dyt + dxt;
@@ -61,22 +51,22 @@ __global__ void CalculateFixed(
 				int dyb = oy + dyt;
 				int dcurb = wb * dyb + dxb;
 				if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
-					sum[0] += target[dcurt*3 + 0] * coef[i];
-					sum[1] += target[dcurt*3 + 1] * coef[i];
-					sum[2] += target[dcurt*3 + 2] * coef[i];
-					num += coef[i];
+					sum[0] += target[dcurt*3 + 0];
+					sum[1] += target[dcurt*3 + 1];
+					sum[2] += target[dcurt*3 + 2];
+					num++;
 
 					if (mask[dcurt] < 127.0f &&
 						dxb >= 0 && dxb < wb && dyb >= 0 && dyb < hb){
-						bsum[0] += background[dcurb*3 + 0] * coef[i];
-						bsum[1] += background[dcurb*3 + 1] * coef[i];
-						bsum[2] += background[dcurb*3 + 2] * coef[i];	
+						bsum[0] += background[dcurb*3 + 0];
+						bsum[1] += background[dcurb*3 + 1];
+						bsum[2] += background[dcurb*3 + 2];	
 					}
 				}
 				else if (dxb >= 0 && dxb < wb && dyb >= 0 && dyb < hb){
-					bsum[0] += background[dcurb*3 + 0] * coef[i];
-					bsum[1] += background[dcurb*3 + 1] * coef[i];
-					bsum[2] += background[dcurb*3 + 2] * coef[i];	
+					bsum[0] += background[dcurb*3 + 0];
+					bsum[1] += background[dcurb*3 + 1];
+					bsum[2] += background[dcurb*3 + 2];
 				}
 			}
 			fixed[curt*3+0] = target[curt*3+0] - sum[0] / num + bsum[0] / bnum;
@@ -96,35 +86,24 @@ __global__ void PossionImageCloningIteration(
 	const float *mask,
 	float *input,
 	float *output,
-	const int wt, const int ht,
-	const int round
+	const int wt, const int ht
 ){
-	const int dir[16][2] = {{-2, -2},				{0, -2},			{2, -2},
-										{-1, -1},	{0, -1},	{1, -1},
-							{-2, 0},	{-1, 0},				{1, 0},	{2, 0},
-										{-1, 1},	{0, 1},		{1, 1},
-							{-2, 2},				{0, 2},				{2, 2}};
-	const int coef[16] = {	1,		1,		1,
-								2,	2,	2,
-							1,	2,		2,	1,
-								2,	2,	2,
-							1,		1,		1};
-
+	const int dir[4][2] = {	{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
 	const int curt = wt * yt + xt;
 	if (yt < ht && xt < wt && mask[curt] > 127.0f){
 		float sum[3] = {0};
-		int num = 24;
-		for (int i=0; i<16; i++){
+		int num = 4;
+		for (int i=0; i<4; i++){
 			int dxt = xt + dir[i][0];
 			int dyt = yt + dir[i][1];
 			if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
 				int dcurt = wt * dyt + dxt;
 				if (mask[dcurt] > 127.0f){
-					sum[0] += input[dcurt*3+0] * coef[i];
-					sum[1] += input[dcurt*3+1] * coef[i];
-					sum[2] += input[dcurt*3+2] * coef[i];
+					sum[0] += input[dcurt*3+0];
+					sum[1] += input[dcurt*3+1];
+					sum[2] += input[dcurt*3+2];
 				}
 			}
 		}
@@ -158,12 +137,12 @@ void PoissonImageCloning(
 	cudaMemcpy(buf1, target, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
 
 	// iterate
-	for (int i = 0; i < 4000; i++){
+	for (int i = 0; i < 10000; i++){
 		PossionImageCloningIteration<<<gdim, bdim>>>(
-			fixed, mask, buf1, buf2, wt, ht, i
+			fixed, mask, buf1, buf2, wt, ht
 		);
 		PossionImageCloningIteration<<<gdim, bdim>>>(
-			fixed, mask, buf2, buf1, wt, ht, i
+			fixed, mask, buf2, buf1, wt, ht
 		);
 	}
 

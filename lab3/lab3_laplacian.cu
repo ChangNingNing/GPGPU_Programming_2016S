@@ -35,16 +35,16 @@ __global__ void CalculateFixed(
 	const int wb, const int hb, const int wt, const int ht,
 	const int oy, const int ox
 ){
-	const int dir[16][2] = {{-2, -2},				{0, -2},			{2, -2},
-										{-1, -1},	{0, -1},	{1, -1},
-							{-2, 0},	{-1, 0},				{1, 0},	{2, 0},
-										{-1, 1},	{0, 1},		{1, 1},
-							{-2, 2},				{0, 2},				{2, 2}};
-	const int coef[16] = {	1,		1,		1,
-								2,	2,	2,
-							1,	2,		2,	1,
-								2,	2,	2,
-							1,		1,		1};
+	const int dir[12][2] = {{0, -2},
+							{-1, -1}, {0, -1}, {1, -1},
+							{-2, 0}, {-1, 0}, {1, 0}, {2, 0},
+							{-1, 1}, {0, 1}, {1, 1},
+							{0, 2}};
+	const int coef[12] = {	1,
+							1, 2, 1,
+							1, 2, 2, 1,
+							1, 2, 1,
+							1};
 
 	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
@@ -52,8 +52,8 @@ __global__ void CalculateFixed(
 	if (yt < ht && xt < wt){
 		if (mask[curt] > 127.0f){
 			float sum[3] = {0}, bsum[3] = {0};
-			int num = 0, bnum = 24;
-			for (int i=0; i<16; i++){
+			int num = 0, bnum = 16;
+			for (int i=0; i<12; i++){
 				int dxt = xt + dir[i][0];
 				int dyt = yt + dir[i][1];
 				int dcurt = wt * dyt + dxt;
@@ -99,24 +99,24 @@ __global__ void PossionImageCloningIteration(
 	const int wt, const int ht,
 	const int round
 ){
-	const int dir[16][2] = {{-2, -2},				{0, -2},			{2, -2},
-										{-1, -1},	{0, -1},	{1, -1},
-							{-2, 0},	{-1, 0},				{1, 0},	{2, 0},
-										{-1, 1},	{0, 1},		{1, 1},
-							{-2, 2},				{0, 2},				{2, 2}};
-	const int coef[16] = {	1,		1,		1,
-								2,	2,	2,
-							1,	2,		2,	1,
-								2,	2,	2,
-							1,		1,		1};
+	const int dir[12][2] = {{0, -2},
+							{-1, -1}, {0, -1}, {1, -1},
+							{-2, 0}, {-1, 0}, {1, 0}, {2, 0},
+							{-1, 1}, {0, 1}, {1, 1},
+							{0, 2}};
+	const int coef[12] = {	1,
+							1, 2, 1,
+							1, 2, 2, 1,
+							1, 2, 1,
+							1};
 
 	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
 	const int curt = wt * yt + xt;
 	if (yt < ht && xt < wt && mask[curt] > 127.0f){
 		float sum[3] = {0};
-		int num = 24;
-		for (int i=0; i<16; i++){
+		int num = 16;
+		for (int i=0; i<12; i++){
 			int dxt = xt + dir[i][0];
 			int dyt = yt + dir[i][1];
 			if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
@@ -158,7 +158,7 @@ void PoissonImageCloning(
 	cudaMemcpy(buf1, target, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
 
 	// iterate
-	for (int i = 0; i < 4000; i++){
+	for (int i = 0; i < 5000; i++){
 		PossionImageCloningIteration<<<gdim, bdim>>>(
 			fixed, mask, buf1, buf2, wt, ht, i
 		);
