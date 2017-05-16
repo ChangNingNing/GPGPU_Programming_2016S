@@ -9,5 +9,6 @@ output="output.ppm"
 
 cd ./lab3_test
 time ../main ${img_b[$1]} ${img_t[$1]} ${img_m[$1]} ${offset_y[$1]} ${offset_x[$1]} ${output}
+#perf stat ../main ${img_b[$1]} ${img_t[$1]} ${img_m[$1]} ${offset_y[$1]} ${offset_x[$1]} ${output}
 cd ..
 python trans.py
