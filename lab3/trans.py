@@ -1,4 +1,5 @@
 from PIL import Image
+import sys
 
-im = Image.open("./lab3_test/output.ppm")
-im.save("./lab3_test/output.jpg")
+im = Image.open(sys.argv[1])
+im.save(sys.argv[2])

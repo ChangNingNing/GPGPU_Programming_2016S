@@ -5,10 +5,14 @@ img_t=("img_target.ppm" "giant.ppm")
 img_m=("img_mask.pgm" "giant_mask.pgm")
 offset_y=("130" "420")
 offset_x=("600" "90")
-output="output.ppm"
+output=("output" "output_giant")
 
-cd ./lab3_test
-time ../main ${img_b[$1]} ${img_t[$1]} ${img_m[$1]} ${offset_y[$1]} ${offset_x[$1]} ${output}
-#perf stat ../main ${img_b[$1]} ${img_t[$1]} ${img_m[$1]} ${offset_y[$1]} ${offset_x[$1]} ${output}
-cd ..
-python trans.py
+make
+for((i=0; i<2; i+=1))
+do
+	cd ./lab3_test
+	echo ${output[$i]}
+	time ../main ${img_b[$i]} ${img_t[$i]} ${img_m[$i]} ${offset_y[$i]} ${offset_x[$i]} "${output[$i]}.ppm"
+	cd ..
+	python trans.py "lab3_test/${output[$i]}.ppm" "lab3_test/${output[$i]}.png"
+done

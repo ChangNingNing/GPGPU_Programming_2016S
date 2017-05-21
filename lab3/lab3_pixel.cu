@@ -49,7 +49,6 @@ __global__ void CalculateFixed(
 	const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
 	const int curt = wt * yt + xt;
-
 	if (yt < ht && xt < wt){
 		float sum[3] = {0}, bsum[3] = {0};
 		for (int i=0; i<16; i++){
@@ -58,7 +57,6 @@ __global__ void CalculateFixed(
 			int dcurt = wt * dyt + dxt;
 			int dxb = ox + dxt;
 			int dyb = oy + dyt;
-			int dcurb = wb * dyb + dxb;
 			if (dxt >= 0 && dxt < wt && dyt >= 0 && dyt < ht){
 				sum[0] += subT[dcurt*3 + 0] * coef[i];
 				sum[1] += subT[dcurt*3 + 1] * coef[i];
@@ -70,10 +68,12 @@ __global__ void CalculateFixed(
 				sum[2] += subT[curt*3 + 2] * coef[i];
 			}
 
-			if ((dxt < 0 || dxt >= wt || dyt < 0 || dyt >= ht ||
-				!subM[dcurt])
-				&&
-				(dxb >= 0 && dxb < wb && dyb >= 0 && dyb < hb)){
+			if (dxt < 0 || dxt >= wt || dyt < 0 || dyt >= ht ||!subM[dcurt]){
+				dxb =	dxb <  0 ? 0:
+						dxb >= wb? wb-1: dxb;
+				dyb =	dyb <  0 ? 0:
+						dyb >= hb? hb-1: dyb;
+				int dcurb = wb * dyb + dxb;
 				bsum[0] += subBG[dcurb*3 + 0] * coef[i];
 				bsum[1] += subBG[dcurb*3 + 1] * coef[i];
 				bsum[2] += subBG[dcurb*3 + 2] * coef[i];
